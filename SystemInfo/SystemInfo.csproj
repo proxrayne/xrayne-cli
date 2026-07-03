@@ -1,6 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <AssemblyName>SystemInfo</AssemblyName>
-    <RootNamespace>SystemInfo</RootNamespace>
-  </PropertyGroup>
-</Project>

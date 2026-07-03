@@ -8,7 +8,6 @@ Standalone source repository for the XRayne `xrayne` command-line tool.
 - `Contracts`: shared configuration, values, enums, and utility contracts used by the CLI.
 - `Data`: EF Core persistence, entities, migrations, repositories, and runtime config-file utilities.
 - `Infrastructure`: CLI-safe runtime services and cross-cutting utilities.
-- `SystemInfo`: host system information helpers.
 - `Tests`: focused unit tests for the Octokit-backed release helper, runtime config utilities, migrations, and CLI support code.
 
 ## Validation
