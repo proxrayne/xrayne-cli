@@ -1,0 +1,97 @@
+name: Build CLI artifacts
+
+on:
+  push:
+    tags:
+      - "*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version tag, for example v0.0.1-beta-3"
+        required: true
+        type: string
+
+env:
+  RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
+
+permissions:
+  contents: write
+
+jobs:
+  publish-cli:
+    name: Publish ${{ matrix.rid }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+            archive-name: xrayne-cli-win-x64
+            archive-path: artifacts/xrayne-cli-win-x64.zip
+            executable: xrayne.exe
+          - os: macos-latest
+            rid: osx-arm64
+            archive-name: xrayne-cli-osx-arm64
+            archive-path: artifacts/xrayne-cli-osx-arm64.tar.gz
+            executable: xrayne
+          - os: ubuntu-latest
+            rid: linux-x64
+            archive-name: xrayne-cli-linux-x64
+            archive-path: artifacts/xrayne-cli-linux-x64.tar.gz
+            executable: xrayne
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore Cli/Cli.csproj -r ${{ matrix.rid }}
+
+      - name: Publish
+        run: >
+          dotnet publish Cli/Cli.csproj
+          -c Release
+          -r ${{ matrix.rid }}
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:PublishTrimmed=false
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true
+          -p:InformationalVersion=${{ env.RELEASE_VERSION }}
+          -o artifacts/${{ matrix.archive-name }}
+
+      - name: Make Unix executable
+        if: runner.os != 'Windows'
+        run: chmod +x artifacts/${{ matrix.archive-name }}/${{ matrix.executable }}
+
+      - name: Archive Windows artifact
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path artifacts/${{ matrix.archive-name }}/* -DestinationPath artifacts/${{ matrix.archive-name }}.zip
+
+      - name: Archive Unix artifact
+        if: runner.os != 'Windows'
+        run: tar -czf artifacts/${{ matrix.archive-name }}.tar.gz -C artifacts/${{ matrix.archive-name }} .
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.archive-name }}
+          path: ${{ matrix.archive-path }}
+
+      - name: Upload release asset
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: VanyaKrotov/xrayne
+          tag_name: ${{ env.RELEASE_VERSION }}
+          target_commitish: main
+          files: ${{ matrix.archive-path }}
+          prerelease: ${{ startsWith(env.RELEASE_VERSION, 'v') && (contains(env.RELEASE_VERSION, '-alpha') || contains(env.RELEASE_VERSION, '-beta')) }}
+          token: ${{ secrets.PUBLIC_RELEASE_TOKEN }}

@@ -1,21 +1,27 @@
 ---
 name: proxrayne-cli-project
-description: Bootstrap guidance for the Proxrayne xrayne-cli repository. Use when Codex is asked about this repository, future CLI extraction, standalone CLI planning, or adding initial project structure. The repository is currently empty; current CLI source remains in xrayne-panel/Cli until an explicit split task.
+description: Project guidance for the Proxrayne xrayne-cli repository. Use when Codex changes the standalone XRayne CLI, release artifact workflow, CLI runtime migrations, installer/update behavior, or CLI data/infrastructure projects.
 ---
 
 # Proxrayne CLI Project
 
 ## Current State
 
-This repository is an empty future split target for the XRayne CLI. The current production CLI source lives in `xrayne-panel/Cli`.
+This repository owns the standalone XRayne CLI source. The executable assembly remains `xrayne`, and public release artifact names remain `xrayne-cli-<rid>`.
 
 ## Rules
 
-- Do not add CLI code here unless the user explicitly asks to start or perform the CLI split.
-- Use `$proxrayne-project` before planning any split from `xrayne-panel/Cli`.
-- Keep any future bootstrap work aligned with current `xrayne-panel` CLI command behavior, release artifact names, installer expectations, and runtime migration contracts.
-- When the split begins, document the migration plan in the meta repo and update both `xrayne-panel` and `xrayne` docs.
+- Use `$proxrayne-project` first when CLI changes affect release assets, installer behavior, `xrayne-panel`, `xrayne`, or shared runtime contracts.
+- Keep CLI command behavior, executable name, runtime file layout, and release artifact names backward compatible unless the user explicitly asks for a breaking change.
+- Keep EF persistence and config-file utilities in `Data`.
+- Keep xray-core lifecycle and CLI-safe shared services in `Infrastructure`; do not add panel/node hosted services here.
+- Keep release asset lookup compatible with the public release repository unless a task explicitly changes release ownership.
 
 ## Validation
 
-There are no code-level validation commands until the repository is initialized with source code. Validate this skill with `quick_validate.py`.
+```powershell
+dotnet restore XRayne.Cli.sln
+dotnet build XRayne.Cli.sln
+dotnet test XRayne.Cli.sln
+dotnet run --project Cli -- --help
+```

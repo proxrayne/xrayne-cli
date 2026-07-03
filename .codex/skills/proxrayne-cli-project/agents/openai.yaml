@@ -1,4 +1,4 @@
 interface:
   display_name: "Proxrayne CLI Project"
-  short_description: "Bootstrap rules for the future xrayne-cli split"
-  default_prompt: "Use $proxrayne-cli-project before planning or changing the xrayne-cli repository."
+  short_description: "Project rules for the standalone xrayne-cli repository"
+  default_prompt: "Use $proxrayne-cli-project before changing the standalone xrayne-cli repository."
