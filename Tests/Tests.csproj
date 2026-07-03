@@ -17,7 +17,6 @@
   <ItemGroup>
     <ProjectReference Include="..\Cli\Cli.csproj" />
     <ProjectReference Include="..\Data\Data.csproj" />
-    <ProjectReference Include="..\Github\Github.csproj" />
     <ProjectReference Include="..\Infrastructure\Infrastructure.csproj" />
   </ItemGroup>
 </Project>

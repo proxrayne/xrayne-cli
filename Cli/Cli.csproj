@@ -16,12 +16,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../Github/Github.csproj" />
     <ProjectReference Include="../Infrastructure/Infrastructure.csproj" />
     <ProjectReference Include="../Data/Data.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Octokit" Version="14.0.0" />
     <PackageReference Include="Serilog.Extensions.Hosting" Version="9.*" />
     <PackageReference Include="Serilog.Settings.Configuration" Version="9.*" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.*" />

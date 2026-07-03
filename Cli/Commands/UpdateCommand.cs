@@ -1,4 +1,3 @@
-using Github;
 using System.CommandLine;
 using System.Diagnostics;
 using System.Formats.Tar;
@@ -15,6 +14,7 @@ using Cli.Services.Contracts;
 using Cli.Values;
 using Contracts.Values;
 using Data.Utilities;
+using Octokit;
 
 namespace Cli.Commands;
 
@@ -70,12 +70,12 @@ public sealed class UpdateCommand : Command
         var apiInstallationService = serviceProvider.GetRequiredService<IApiInstallationService>();
         var runtimeMigrationService = serviceProvider.GetRequiredService<IRuntimeMigrationService>();
         var configuration = serviceProvider.GetRequiredService<IConfiguration>();
-        var repository = new GitHubRepository(CliDefaults.XRayneRepositoryUrl);
+        using var repository = new GitHubReleaseClient(CliDefaults.XRayneRepositoryUrl);
 
         try
         {
             var release = await repository.GetReleaseAsync(version, cancellationToken);
-            if (release.PreRelease)
+            if (release.Prerelease)
             {
                 throw new InvalidOperationException("Pre-release versions are not supported. Use a stable release tag.");
             }
@@ -174,11 +174,11 @@ public sealed class UpdateCommand : Command
 
     private static async Task<bool> UpdateDockerImageAsync(
         ICliConsole console,
-        GitHubRepository gitHubRepository,
+        GitHubReleaseClient gitHubRepository,
         IShellService shellService,
         IApiInstallationService apiInstallationService,
         IConfiguration configuration,
-        GitHubRelease release,
+        Release release,
         string targetVersion,
         bool force,
         string componentName,
@@ -272,8 +272,8 @@ public sealed class UpdateCommand : Command
 
     private static async Task UpdateCliAsync(
         ICliConsole console,
-        GitHubRepository gitHubRepository,
-        GitHubRelease release,
+        GitHubReleaseClient gitHubRepository,
+        Release release,
         bool force,
         CancellationToken cancellationToken)
     {

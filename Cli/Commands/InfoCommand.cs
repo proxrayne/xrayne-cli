@@ -1,4 +1,3 @@
-using Github;
 using System.CommandLine;
 using System.Reflection;
 using Microsoft.Extensions.Configuration;
@@ -34,7 +33,7 @@ public sealed class InfoCommand : Command
         var logger = serviceProvider.GetRequiredService<ILogger<InfoCommand>>();
         var configuration = serviceProvider.GetRequiredService<IConfiguration>();
         var apiInstallationService = serviceProvider.GetRequiredService<IApiInstallationService>();
-        var repository = new GitHubRepository(CliDefaults.XRayneRepositoryUrl);
+        using var repository = new GitHubReleaseClient(CliDefaults.XRayneRepositoryUrl);
 
         try
         {
@@ -96,7 +95,7 @@ public sealed class InfoCommand : Command
     }
 
     private static async Task<UpdateStatus> GetUpdateStatusAsync(
-        GitHubRepository gitHubRepository,
+        GitHubReleaseClient gitHubRepository,
         string cliVersion,
         string? apiVersion,
         string? uiVersion,

@@ -1,14 +1,15 @@
-using Github;
 using System.CommandLine;
 using System.IO.Compression;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Cli.Output;
+using Cli.Services;
 using Cli.Services.Contracts;
 using Cli.Values;
 using Contracts.Values;
 using Infrastructure.Utilities;
 using Data.Utilities;
+using Octokit;
 
 namespace Cli.Commands.Api;
 
@@ -46,14 +47,14 @@ public sealed class ApiInstallCommand : Command
         var shellService = serviceProvider.GetRequiredService<IShellService>();
         var apiInstallationService = serviceProvider.GetRequiredService<IApiInstallationService>();
         var dockerComposeFileService = serviceProvider.GetRequiredService<IDockerComposeFileService>();
-        var repository = new GitHubRepository(CliDefaults.XRayneRepositoryUrl);
+        using var repository = new GitHubReleaseClient(CliDefaults.XRayneRepositoryUrl);
 
         try
         {
             var options = ReadInstallOptions();
 
             var release = await repository.GetReleaseAsync(version, cancellationToken);
-            if (release.PreRelease)
+            if (release.Prerelease)
             {
                 throw new InvalidOperationException("Pre-release versions are not supported. Use a stable release tag.");
             }
@@ -134,9 +135,9 @@ public sealed class ApiInstallCommand : Command
 
     private static async Task DownloadAndLoadImageAsync(
         ICliConsole console,
-        GitHubRepository repository,
+        GitHubReleaseClient repository,
         IShellService shellService,
-        GitHubRelease release,
+        Release release,
         string assetName,
         string imageTarName,
         InstallOptions options,

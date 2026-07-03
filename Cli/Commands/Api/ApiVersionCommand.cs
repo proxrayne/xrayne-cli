@@ -1,9 +1,9 @@
-using Github;
 using System.CommandLine;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Cli.Output;
+using Cli.Services;
 using Cli.Values;
 
 namespace Cli.Commands.Api;
@@ -28,7 +28,7 @@ public sealed class ApiVersionCommand : Command
         var console = serviceProvider.GetRequiredService<ICliConsole>();
         var logger = serviceProvider.GetRequiredService<ILogger<ApiVersionCommand>>();
         var configuration = serviceProvider.GetRequiredService<IConfiguration>();
-        var repository = new GitHubRepository(CliDefaults.XRayneRepositoryUrl);
+        using var repository = new GitHubReleaseClient(CliDefaults.XRayneRepositoryUrl);
 
         try
         {
