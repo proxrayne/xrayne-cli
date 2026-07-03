@@ -8,7 +8,8 @@ public sealed class RuntimeMigrationService : IRuntimeMigrationService
 {
     private readonly IReadOnlyList<IRuntimeMigration> _migrations =
     [
-        new V1UseHostNetworkForApiMigration()
+        new V1UseHostNetworkForApiMigration(),
+        new V2AddStandaloneUiServiceMigration()
     ];
 
     public async Task<RuntimeMigrationResult> MigrateToAsync(

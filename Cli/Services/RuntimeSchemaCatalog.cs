@@ -2,7 +2,7 @@ namespace Cli.Services;
 
 public static class RuntimeSchemaCatalog
 {
-    public const int LatestSchemaVersion = 1;
+    public const int LatestSchemaVersion = 2;
 
     public static int ResolveForRelease(string releaseTag)
     {
@@ -12,9 +12,12 @@ public static class RuntimeSchemaCatalog
             return LatestSchemaVersion;
         }
 
-        return version >= new Version(0, 0, 15)
-            ? 1
-            : 0;
+        if (version >= new Version(0, 0, 16))
+        {
+            return 2;
+        }
+
+        return version >= new Version(0, 0, 15) ? 1 : 0;
     }
 
     private static Version? NormalizeVersion(string releaseTag)

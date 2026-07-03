@@ -21,7 +21,7 @@ namespace Cli.Commands;
 public sealed class UpdateCommand : Command
 {
     public UpdateCommand(IServiceProvider serviceProvider)
-        : base("update", "Update XRayne CLI and API to a selected release")
+        : base("update", "Update XRayne CLI, API, and UI to a selected release")
     {
         var versionOption = new Option<string>("--version")
         {
@@ -31,7 +31,7 @@ public sealed class UpdateCommand : Command
 
         var componentOption = new Option<string>("--component")
         {
-            Description = "Component to update: all, api, or cli.",
+            Description = "Component to update: all, api, ui, or cli.",
             DefaultValueFactory = _ => UpdateComponent.All.Value
         };
 
@@ -95,10 +95,11 @@ public sealed class UpdateCommand : Command
             PrintMigrationResult(console, migrationResult);
 
             var apiRestarted = false;
+            var uiRestarted = false;
 
             if (component.UpdateApi)
             {
-                apiRestarted = await UpdateApiAsync(
+                apiRestarted = await UpdateDockerImageAsync(
                     console,
                     repository,
                     shellService,
@@ -107,10 +108,38 @@ public sealed class UpdateCommand : Command
                     release,
                     targetVersion,
                     force,
+                    "API",
+                    CliDefaults.ApiImageVariable,
+                    CliDefaults.GetApiImageArchiveName,
+                    CliDefaults.GetApiImageTarName,
+                    CliDefaults.GetApiImageName,
+                    CliDefaults.ExtractApiImageVersion,
+                    "api",
                     cancellationToken);
             }
 
-            if (migrationResult.Changed && !apiRestarted)
+            if (component.UpdateUi)
+            {
+                uiRestarted = await UpdateDockerImageAsync(
+                    console,
+                    repository,
+                    shellService,
+                    apiInstallationService,
+                    configuration,
+                    release,
+                    targetVersion,
+                    force,
+                    "UI",
+                    CliDefaults.UiImageVariable,
+                    CliDefaults.GetUiImageArchiveName,
+                    CliDefaults.GetUiImageTarName,
+                    CliDefaults.GetUiImageName,
+                    CliDefaults.ExtractUiImageVersion,
+                    "ui",
+                    cancellationToken);
+            }
+
+            if (migrationResult.Changed && !apiRestarted && !uiRestarted && (component.UpdateApi || component.UpdateUi))
             {
                 console.Success("Restarting Docker Compose after runtime migration.");
                 await apiInstallationService.RunDockerComposeAsync("up -d --force-recreate", cancellationToken);
@@ -143,7 +172,7 @@ public sealed class UpdateCommand : Command
         }
     }
 
-    private static async Task<bool> UpdateApiAsync(
+    private static async Task<bool> UpdateDockerImageAsync(
         ICliConsole console,
         GitHubRepository gitHubRepository,
         IShellService shellService,
@@ -152,24 +181,30 @@ public sealed class UpdateCommand : Command
         GitHubRelease release,
         string targetVersion,
         bool force,
+        string componentName,
+        string imageVariable,
+        Func<string, string> getArchiveName,
+        Func<string, string> getTarName,
+        Func<string, string> getImageName,
+        Func<string, string?> extractImageVersion,
+        string composeServiceName,
         CancellationToken cancellationToken)
     {
-        console.Section("API");
+        console.Section(componentName);
         apiInstallationService.EnsureInstalled();
 
-        var installedVersion = CliDefaults.ExtractApiImageVersion(configuration[CliDefaults.ApiImageVariable] ?? string.Empty)
-            ?? throw new InvalidOperationException($"'{CliDefaults.ApiImageVariable}' was not found in '{PathProvider.Paths.EnvConfig}'. Run 'xrayne api install' first.");
+        var installedVersion = extractImageVersion(configuration[imageVariable] ?? string.Empty);
 
-        console.Value("Installed version", installedVersion);
+        console.Value("Installed version", installedVersion ?? "not installed");
         console.Value("Target version", targetVersion);
 
         if (!force && string.Equals(installedVersion, targetVersion, StringComparison.Ordinal))
         {
-            console.Success("API is already on the selected release.");
+            console.Success($"{componentName} is already on the selected release.");
             return false;
         }
 
-        var assetName = CliDefaults.GetApiImageArchiveName(targetVersion);
+        var assetName = getArchiveName(targetVersion);
         var asset = release.Assets.SingleOrDefault(item => string.Equals(item.Name, assetName, StringComparison.Ordinal));
         if (asset is null)
         {
@@ -184,20 +219,20 @@ public sealed class UpdateCommand : Command
             PathProvider.Paths.DownloadsDirectory,
             cancellationToken);
 
-        var imageTarPath = Path.Combine(PathProvider.Paths.Root, CliDefaults.GetApiImageTarName(targetVersion));
+        var imageTarPath = Path.Combine(PathProvider.Paths.Root, getTarName(targetVersion));
         await DecompressGzipAsync(imageArchivePath, imageTarPath, cancellationToken);
 
         console.Success("Loading Docker image.");
         await shellService.RunAsync("docker", $"load -i \"{imageTarPath}\"", PathProvider.Paths.Root, cancellationToken);
 
-        await UpdateEnvImageAsync(targetVersion, cancellationToken);
+        await UpdateEnvImageAsync(imageVariable, getImageName(targetVersion), cancellationToken);
 
-        console.Success("Restarting Docker Compose.");
-        await apiInstallationService.RunDockerComposeAsync("up -d", cancellationToken);
+        console.Success($"Restarting Docker Compose service '{composeServiceName}'.");
+        await apiInstallationService.RunDockerComposeAsync($"up -d {composeServiceName}", cancellationToken);
 
-        console.Value("Previous API version", installedVersion);
-        console.Value("Current API version", targetVersion);
-        console.Value("Docker image", CliDefaults.GetApiImageName(targetVersion));
+        console.Value($"Previous {componentName} version", installedVersion ?? "not installed");
+        console.Value($"Current {componentName} version", targetVersion);
+        console.Value("Docker image", getImageName(targetVersion));
 
         return true;
     }
@@ -415,12 +450,13 @@ public sealed class UpdateCommand : Command
     }
 
     private static async Task UpdateEnvImageAsync(
-        string imageTag,
+        string imageVariable,
+        string imageName,
         CancellationToken cancellationToken)
     {
         await EnvConfig.SetAsync(
-            CliDefaults.ApiImageVariable,
-            CliDefaults.GetApiImageName(imageTag),
+            imageVariable,
+            imageName,
             PathProvider.Paths.EnvConfig,
             cancellationToken);
     }
@@ -450,11 +486,13 @@ public sealed class UpdateCommand : Command
     private sealed record UpdateComponent(
         string Value,
         bool UpdateApi,
+        bool UpdateUi,
         bool UpdateCli)
     {
-        public static readonly UpdateComponent All = new("all", UpdateApi: true, UpdateCli: true);
-        public static readonly UpdateComponent Api = new("api", UpdateApi: true, UpdateCli: false);
-        public static readonly UpdateComponent Cli = new("cli", UpdateApi: false, UpdateCli: true);
+        public static readonly UpdateComponent All = new("all", UpdateApi: true, UpdateUi: true, UpdateCli: true);
+        public static readonly UpdateComponent Api = new("api", UpdateApi: true, UpdateUi: false, UpdateCli: false);
+        public static readonly UpdateComponent Ui = new("ui", UpdateApi: false, UpdateUi: true, UpdateCli: false);
+        public static readonly UpdateComponent Cli = new("cli", UpdateApi: false, UpdateUi: false, UpdateCli: true);
 
         public static UpdateComponent Parse(string? value)
         {
@@ -462,8 +500,9 @@ public sealed class UpdateCommand : Command
             {
                 null or "" or "all" => All,
                 "api" => Api,
+                "ui" => Ui,
                 "cli" => Cli,
-                _ => throw new InvalidOperationException("Component must be one of: all, api, cli.")
+                _ => throw new InvalidOperationException("Component must be one of: all, api, ui, cli.")
             };
         }
     }

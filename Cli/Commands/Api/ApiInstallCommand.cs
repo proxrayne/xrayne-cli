@@ -15,7 +15,7 @@ namespace Cli.Commands.Api;
 public sealed class ApiInstallCommand : Command
 {
     public ApiInstallCommand(IServiceProvider serviceProvider)
-        : base("install", "Download and install XRayne API Docker image")
+        : base("install", "Download and install XRayne API and UI Docker images")
     {
         var versionOption = new Option<string>("--version")
         {
@@ -59,29 +59,29 @@ public sealed class ApiInstallCommand : Command
             }
 
             var imageTag = SanitizeDockerTag(release.TagName);
-            var assetName = CliDefaults.GetApiImageArchiveName(imageTag);
-            var asset = release.Assets.SingleOrDefault(item => string.Equals(item.Name, assetName, StringComparison.Ordinal));
-            if (asset is null)
-            {
-                throw new InvalidOperationException($"Release asset '{assetName}' was not found in release '{release.TagName}'.");
-            }
-
             Directory.CreateDirectory(options.Paths.LogsDirectory);
             Directory.CreateDirectory(options.Paths.PostgresDirectory);
             Directory.CreateDirectory(options.Paths.XrayDirectory);
             Directory.CreateDirectory(options.Paths.DownloadsDirectory);
 
-            console.Success($"Downloading {asset.Name} from {repository.FullName} {release.TagName}.");
-            var imageArchivePath = await repository.DownloadAssetAsync(
-                asset,
-                options.Paths.DownloadsDirectory,
+            await DownloadAndLoadImageAsync(
+                console,
+                repository,
+                shellService,
+                release,
+                CliDefaults.GetApiImageArchiveName(imageTag),
+                CliDefaults.GetApiImageTarName(imageTag),
+                options,
                 cancellationToken);
-
-            var imageTarPath = Path.Combine(options.Paths.Root, CliDefaults.GetApiImageTarName(imageTag));
-            await DecompressGzipAsync(imageArchivePath, imageTarPath, cancellationToken);
-
-            console.Success("Loading Docker image.");
-            await shellService.RunAsync("docker", $"load -i \"{imageTarPath}\"", options.Paths.Root, cancellationToken);
+            await DownloadAndLoadImageAsync(
+                console,
+                repository,
+                shellService,
+                release,
+                CliDefaults.GetUiImageArchiveName(imageTag),
+                CliDefaults.GetUiImageTarName(imageTag),
+                options,
+                cancellationToken);
 
             await WriteEnvFileAsync(imageTag, options, cancellationToken);
             await dockerComposeFileService.WriteApiComposeAsync(options.Paths, imageTag, cancellationToken);
@@ -111,6 +111,11 @@ public sealed class ApiInstallCommand : Command
             CliDefaults.DefaultApiPort,
             value => value is >= 1 and <= 65535,
             "Port must be between 1 and 65535.");
+        var uiPort = ReadInt(
+            $"UI port [{CliDefaults.DefaultUiPort}]: ",
+            CliDefaults.DefaultUiPort,
+            value => value is >= 1 and <= 65535,
+            "Port must be between 1 and 65535.");
 
         Console.Write("Enter PostgreSQL password or leave empty to generate one: ");
         var postgresPassword = Console.ReadLine();
@@ -122,8 +127,38 @@ public sealed class ApiInstallCommand : Command
         return new InstallOptions(PathProvider.GetProjectDirectory())
         {
             ApiPort = apiPort,
+            UiPort = uiPort,
             PostgresPassword = postgresPassword
         };
+    }
+
+    private static async Task DownloadAndLoadImageAsync(
+        ICliConsole console,
+        GitHubRepository repository,
+        IShellService shellService,
+        GitHubRelease release,
+        string assetName,
+        string imageTarName,
+        InstallOptions options,
+        CancellationToken cancellationToken)
+    {
+        var asset = release.Assets.SingleOrDefault(item => string.Equals(item.Name, assetName, StringComparison.Ordinal));
+        if (asset is null)
+        {
+            throw new InvalidOperationException($"Release asset '{assetName}' was not found in release '{release.TagName}'.");
+        }
+
+        console.Success($"Downloading {asset.Name} from {repository.FullName} {release.TagName}.");
+        var imageArchivePath = await repository.DownloadAssetAsync(
+            asset,
+            options.Paths.DownloadsDirectory,
+            cancellationToken);
+
+        var imageTarPath = Path.Combine(options.Paths.Root, imageTarName);
+        await DecompressGzipAsync(imageArchivePath, imageTarPath, cancellationToken);
+
+        console.Success($"Loading Docker image from {imageTarName}.");
+        await shellService.RunAsync("docker", $"load -i \"{imageTarPath}\"", options.Paths.Root, cancellationToken);
     }
 
     private static int ReadInt(
@@ -170,8 +205,10 @@ public sealed class ApiInstallCommand : Command
         var values = new SortedDictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["PORT"] = options.ApiPort.ToString(),
+            ["UI_PORT"] = options.UiPort.ToString(),
             ["PROJECT_PATH"] = options.Paths.Root,
             ["API_IMAGE"] = CliDefaults.GetApiImageName(imageTag),
+            ["UI_IMAGE"] = CliDefaults.GetUiImageName(imageTag),
             ["POSTGRES_DB"] = CliDefaults.PostgresDatabase,
             ["POSTGRES_HOST_API"] = "localhost",
             ["POSTGRES_USER"] = CliDefaults.PostgresUser,
@@ -198,7 +235,7 @@ public sealed class ApiInstallCommand : Command
         string imageTag,
         InstallOptions options)
     {
-        var panelUrl = $"http://0.0.0.0:{options.ApiPort}/";
+        var panelUrl = $"http://0.0.0.0:{options.UiPort}/";
         var apiUrl = $"http://0.0.0.0:{options.ApiPort}/api";
 
         console.Header("XRayne API installation completed");
@@ -211,6 +248,7 @@ public sealed class ApiInstallCommand : Command
         console.Section("Panel");
         console.Value("URL", panelUrl);
         console.Value("API URL", apiUrl);
+        console.Value("Docker image", CliDefaults.GetUiImageName(imageTag));
 
         console.Section("PostgreSQL");
         console.Value("API host", "localhost:5432");
@@ -229,6 +267,7 @@ public sealed class ApiInstallCommand : Command
         console.Section("Next useful commands");
         console.Command($"cd {options.Paths.Root}");
         console.Command("docker compose ps");
+        console.Command("docker compose logs -f ui");
         console.Command("docker compose logs -f api");
         console.Command("docker compose logs -f postgres");
     }
@@ -247,6 +286,7 @@ public sealed class ApiInstallCommand : Command
     private sealed class InstallOptions
     {
         public int ApiPort { get; set; }
+        public int UiPort { get; set; }
         public string PostgresPassword { get; set; } = string.Empty;
         public ProjectPaths Paths { get; }
 

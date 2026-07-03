@@ -58,6 +58,25 @@ public sealed class DockerComposeFileService : IDockerComposeFileService
                     },
                     ["restart"] = "unless-stopped"
                 },
+                ["ui"] = new Dictionary<string, object?>
+                {
+                    ["image"] = $"${{UI_IMAGE:-{CliDefaults.GetUiImageName(imageTag)}}}",
+                    ["container_name"] = "xrayne-ui",
+                    ["ports"] = new[] { "${UI_PORT:-8080}:80" },
+                    ["environment"] = new Dictionary<string, object?>
+                    {
+                        ["API_UPSTREAM"] = "http://host.docker.internal:${PORT:-5000}"
+                    },
+                    ["extra_hosts"] = new[] { "host.docker.internal:host-gateway" },
+                    ["depends_on"] = new Dictionary<string, object?>
+                    {
+                        ["api"] = new Dictionary<string, object?>
+                        {
+                            ["condition"] = "service_started"
+                        }
+                    },
+                    ["restart"] = "unless-stopped"
+                },
                 ["postgres"] = new Dictionary<string, object?>
                 {
                     ["image"] = "postgres:16-alpine",

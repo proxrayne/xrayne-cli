@@ -16,7 +16,7 @@ namespace Cli.Commands;
 public sealed class InfoCommand : Command
 {
     public InfoCommand(IServiceProvider serviceProvider)
-        : base("info", "Print XRayne CLI, project, and API runtime information")
+        : base("info", "Print XRayne CLI, project, API, and UI runtime information")
     {
         SetAction(async (_, cancellationToken) =>
         {
@@ -40,14 +40,18 @@ public sealed class InfoCommand : Command
         {
             var apiStatus = await GetApiStatusAsync(apiInstallationService, cancellationToken);
             var apiPort = GetConfigurationValue(configuration, "PORT", CliDefaults.DefaultApiPort.ToString());
+            var uiPort = GetConfigurationValue(configuration, "UI_PORT", CliDefaults.DefaultUiPort.ToString());
             var serverIp = NetworkAddress.GetLocalServerIpAddress();
             var apiEndpoint = GetApiEndpoint(configuration, serverIp, apiPort);
+            var uiEndpoint = $"http://{serverIp}:{uiPort}";
             var cliVersion = GetVersion();
             var apiVersion = CliDefaults.ExtractApiImageVersion(configuration[CliDefaults.ApiImageVariable] ?? string.Empty);
+            var uiVersion = CliDefaults.ExtractUiImageVersion(configuration[CliDefaults.UiImageVariable] ?? string.Empty);
             var updateStatus = await GetUpdateStatusAsync(
                 repository,
                 cliVersion,
                 apiVersion,
+                uiVersion,
                 cancellationToken);
 
             console.Header("XRayne CLI information");
@@ -58,14 +62,18 @@ public sealed class InfoCommand : Command
             console.Section("API");
             console.Value("Status", apiStatus);
             console.Value("Server IP", serverIp);
-            console.Value("Panel URL", $"{apiEndpoint}/");
             console.Value("API URL", $"{apiEndpoint}/api");
             console.Value("Docker image", GetConfigurationValue(configuration, CliDefaults.ApiImageVariable, "(unknown)"));
+
+            console.Section("UI");
+            console.Value("Panel URL", $"{uiEndpoint}/");
+            console.Value("Docker image", GetConfigurationValue(configuration, CliDefaults.UiImageVariable, "(unknown)"));
 
             console.Section("Updates");
             console.Value("Latest release", updateStatus.LatestRelease);
             console.Value("CLI update", updateStatus.CliUpdate);
             console.Value("API update", updateStatus.ApiUpdate);
+            console.Value("UI update", updateStatus.UiUpdate);
 
             console.Section("Project files");
             console.Value("Environment file", FormatPathState(PathProvider.Paths.EnvConfig));
@@ -91,12 +99,14 @@ public sealed class InfoCommand : Command
         GitHubRepository gitHubRepository,
         string cliVersion,
         string? apiVersion,
+        string? uiVersion,
         CancellationToken cancellationToken)
     {
         try
         {
             var release = await gitHubRepository.GetReleaseAsync(CliDefaults.LatestVersion, cancellationToken);
             var latestApiVersion = SanitizeDockerTag(release.TagName);
+            var latestUiVersion = latestApiVersion;
 
             var cliUpdate = string.Equals(cliVersion, release.TagName, StringComparison.Ordinal)
                 ? "not available"
@@ -108,7 +118,13 @@ public sealed class InfoCommand : Command
                     ? "not available"
                     : $"available ({apiVersion} -> {latestApiVersion})";
 
-            return new UpdateStatus(release.TagName, cliUpdate, apiUpdate);
+            var uiUpdate = string.IsNullOrWhiteSpace(uiVersion)
+                ? $"not installed (latest: {latestUiVersion})"
+                : string.Equals(uiVersion, latestUiVersion, StringComparison.Ordinal)
+                    ? "not available"
+                    : $"available ({uiVersion} -> {latestUiVersion})";
+
+            return new UpdateStatus(release.TagName, cliUpdate, apiUpdate, uiUpdate);
         }
         catch (Exception exception)
         {
@@ -117,7 +133,8 @@ public sealed class InfoCommand : Command
             return new UpdateStatus(
                 $"unavailable ({message})",
                 "unknown",
-                string.IsNullOrWhiteSpace(apiVersion) ? "not installed" : "unknown");
+                string.IsNullOrWhiteSpace(apiVersion) ? "not installed" : "unknown",
+                string.IsNullOrWhiteSpace(uiVersion) ? "not installed" : "unknown");
         }
     }
 
@@ -210,5 +227,6 @@ public sealed class InfoCommand : Command
     private sealed record UpdateStatus(
         string LatestRelease,
         string CliUpdate,
-        string ApiUpdate);
+        string ApiUpdate,
+        string UiUpdate);
 }
