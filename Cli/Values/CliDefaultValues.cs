@@ -5,7 +5,10 @@ public static class CliDefaults
     public const string LatestVersion = "latest";
     public const string ApiImageNamePrefix = "xrayne-api-image-";
     public const string UiImageNamePrefix = "xrayne-ui-image-";
-    public const string XRayneRepositoryUrl = "https://github.com/VanyaKrotov/xrayne";
+    public const string CliRepositoryUrl = "https://github.com/proxrayne/xrayne-cli";
+    public const string ApiRepositoryUrl = "https://github.com/proxrayne/xrayne-api";
+    public const string UiRepositoryUrl = "https://github.com/proxrayne/xrayne-ui";
+    public const string NodeRepositoryUrl = "https://github.com/proxrayne/xrayne-node";
     public const int DefaultApiPort = 5000;
     public const int DefaultUiPort = 8080;
     public const string PostgresUser = "postgres";

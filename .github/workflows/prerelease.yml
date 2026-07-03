@@ -1,13 +1,14 @@
-name: Build CLI artifacts
+name: Build CLI prerelease artifacts
 
 on:
   push:
     tags:
-      - "v*.*.*"
+      - "v*.*.*-alpha*"
+      - "v*.*.*-beta*"
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version tag, for example v0.0.1-beta-3"
+        description: "Prerelease version tag, for example v0.0.1-beta-3"
         required: true
         type: string
 
@@ -18,9 +19,9 @@ permissions:
   contents: write
 
 jobs:
-  publish-cli:
+  publish-cli-prerelease:
     name: Publish ${{ matrix.rid }}
-    if: (github.event_name == 'workflow_dispatch' && !contains(inputs.version, '-')) || (github.event_name != 'workflow_dispatch' && !contains(github.ref_name, '-'))
+    if: github.event_name != 'workflow_dispatch' || contains(inputs.version, '-alpha') || contains(inputs.version, '-beta')
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -86,11 +87,12 @@ jobs:
           name: ${{ matrix.archive-name }}
           path: ${{ matrix.archive-path }}
 
-      - name: Upload release asset
+      - name: Upload prerelease asset
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_VERSION }}
           target_commitish: main
           files: ${{ matrix.archive-path }}
-          prerelease: false
+          prerelease: true
+          make_latest: false

@@ -5,9 +5,9 @@ namespace Tests.Infrastructure;
 public sealed class GitHubReleaseClientTests
 {
     [Theory]
-    [InlineData("VanyaKrotov/xrayne", "VanyaKrotov/xrayne")]
-    [InlineData("https://github.com/VanyaKrotov/xrayne", "VanyaKrotov/xrayne")]
-    [InlineData("https://github.com/VanyaKrotov/xrayne/", "VanyaKrotov/xrayne")]
+    [InlineData("proxrayne/xrayne-cli", "proxrayne/xrayne-cli")]
+    [InlineData("https://github.com/proxrayne/xrayne-cli", "proxrayne/xrayne-cli")]
+    [InlineData("https://github.com/proxrayne/xrayne-cli/", "proxrayne/xrayne-cli")]
     public void NormalizeRepositoryFullNameSupportsFullNameAndGitHubUrl(string value, string expected)
     {
         var result = GitHubReleaseClient.NormalizeRepositoryFullName(value);
@@ -17,9 +17,9 @@ public sealed class GitHubReleaseClientTests
 
     [Theory]
     [InlineData("")]
-    [InlineData("https://example.com/VanyaKrotov/xrayne")]
-    [InlineData("VanyaKrotov")]
-    [InlineData("VanyaKrotov/xrayne/extra")]
+    [InlineData("https://example.com/proxrayne/xrayne-cli")]
+    [InlineData("proxrayne")]
+    [InlineData("proxrayne/xrayne-cli/extra")]
     public void NormalizeRepositoryFullNameRejectsUnsupportedRepositoryValues(string value)
     {
         var action = () => GitHubReleaseClient.NormalizeRepositoryFullName(value);

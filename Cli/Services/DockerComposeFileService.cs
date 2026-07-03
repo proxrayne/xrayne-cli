@@ -16,16 +16,17 @@ public sealed class DockerComposeFileService : IDockerComposeFileService
 
     public async Task WriteApiComposeAsync(
         ProjectPaths paths,
-        string imageTag,
+        string apiImageTag,
+        string uiImageTag,
         CancellationToken cancellationToken)
     {
-        var compose = CreateApiCompose(imageTag);
+        var compose = CreateApiCompose(apiImageTag, uiImageTag);
         var yaml = _serializer.Serialize(compose);
 
         await File.WriteAllTextAsync(paths.DockerCompose, yaml, Encoding.UTF8, cancellationToken);
     }
 
-    private static Dictionary<string, object?> CreateApiCompose(string imageTag)
+    private static Dictionary<string, object?> CreateApiCompose(string apiImageTag, string uiImageTag)
     {
         return new Dictionary<string, object?>
         {
@@ -33,7 +34,7 @@ public sealed class DockerComposeFileService : IDockerComposeFileService
             {
                 ["api"] = new Dictionary<string, object?>
                 {
-                    ["image"] = $"${{API_IMAGE:-{CliDefaults.GetApiImageName(imageTag)}}}",
+                    ["image"] = $"${{API_IMAGE:-{CliDefaults.GetApiImageName(apiImageTag)}}}",
                     ["container_name"] = "xrayne-api",
                     ["network_mode"] = "host",
                     ["env_file"] = new[] { ".env" },
@@ -60,7 +61,7 @@ public sealed class DockerComposeFileService : IDockerComposeFileService
                 },
                 ["ui"] = new Dictionary<string, object?>
                 {
-                    ["image"] = $"${{UI_IMAGE:-{CliDefaults.GetUiImageName(imageTag)}}}",
+                    ["image"] = $"${{UI_IMAGE:-{CliDefaults.GetUiImageName(uiImageTag)}}}",
                     ["container_name"] = "xrayne-ui",
                     ["ports"] = new[] { "${UI_PORT:-8080}:80" },
                     ["environment"] = new Dictionary<string, object?>

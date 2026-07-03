@@ -70,22 +70,40 @@ public sealed class UpdateCommand : Command
         var apiInstallationService = serviceProvider.GetRequiredService<IApiInstallationService>();
         var runtimeMigrationService = serviceProvider.GetRequiredService<IRuntimeMigrationService>();
         var configuration = serviceProvider.GetRequiredService<IConfiguration>();
-        using var repository = new GitHubReleaseClient(CliDefaults.XRayneRepositoryUrl);
+        using var cliRepository = new GitHubReleaseClient(CliDefaults.CliRepositoryUrl);
+        using var apiRepository = new GitHubReleaseClient(CliDefaults.ApiRepositoryUrl);
+        using var uiRepository = new GitHubReleaseClient(CliDefaults.UiRepositoryUrl);
 
         try
         {
-            var release = await repository.GetReleaseAsync(version, cancellationToken);
-            if (release.Prerelease)
-            {
-                throw new InvalidOperationException("Pre-release versions are not supported. Use a stable release tag.");
-            }
+            var apiRelease = component.UpdateApi
+                ? await apiRepository.GetReleaseAsync(version, cancellationToken)
+                : null;
+            var uiRelease = component.UpdateUi
+                ? await uiRepository.GetReleaseAsync(version, cancellationToken)
+                : null;
+            var cliRelease = component.UpdateCli
+                ? await cliRepository.GetReleaseAsync(version, cancellationToken)
+                : null;
+            EnsurePrereleaseAllowed(apiRelease, version);
+            EnsurePrereleaseAllowed(uiRelease, version);
+            EnsurePrereleaseAllowed(cliRelease, version);
 
-            var targetVersion = SanitizeDockerTag(release.TagName);
-            var targetSchemaVersion = RuntimeSchemaCatalog.ResolveForRelease(release.TagName);
+            var targetSchemaVersion = ResolveTargetSchemaVersion(apiRelease, uiRelease, cliRelease);
 
             console.Header("XRayne update");
-            console.Value("Repository", repository.FullName);
-            console.Value("Target release", release.TagName);
+            if (cliRelease is not null)
+            {
+                console.Value("CLI release", $"{cliRepository.FullName} {cliRelease.TagName}");
+            }
+            if (apiRelease is not null)
+            {
+                console.Value("API release", $"{apiRepository.FullName} {apiRelease.TagName}");
+            }
+            if (uiRelease is not null)
+            {
+                console.Value("UI release", $"{uiRepository.FullName} {uiRelease.TagName}");
+            }
             console.Value("Target runtime schema", targetSchemaVersion.ToString());
             console.Value("Component", component.Value);
 
@@ -99,13 +117,14 @@ public sealed class UpdateCommand : Command
 
             if (component.UpdateApi)
             {
+                var targetVersion = SanitizeDockerTag(apiRelease!.TagName);
                 apiRestarted = await UpdateDockerImageAsync(
                     console,
-                    repository,
+                    apiRepository,
                     shellService,
                     apiInstallationService,
                     configuration,
-                    release,
+                    apiRelease,
                     targetVersion,
                     force,
                     "API",
@@ -120,13 +139,14 @@ public sealed class UpdateCommand : Command
 
             if (component.UpdateUi)
             {
+                var targetVersion = SanitizeDockerTag(uiRelease!.TagName);
                 uiRestarted = await UpdateDockerImageAsync(
                     console,
-                    repository,
+                    uiRepository,
                     shellService,
                     apiInstallationService,
                     configuration,
-                    release,
+                    uiRelease,
                     targetVersion,
                     force,
                     "UI",
@@ -149,14 +169,25 @@ public sealed class UpdateCommand : Command
             {
                 await UpdateCliAsync(
                     console,
-                    repository,
-                    release,
+                    cliRepository,
+                    cliRelease!,
                     force,
                     cancellationToken);
             }
 
             console.Header("Update completed");
-            console.Value("Release", release.TagName);
+            if (cliRelease is not null)
+            {
+                console.Value("CLI release", cliRelease.TagName);
+            }
+            if (apiRelease is not null)
+            {
+                console.Value("API release", apiRelease.TagName);
+            }
+            if (uiRelease is not null)
+            {
+                console.Value("UI release", uiRelease.TagName);
+            }
             console.Value("Project path", PathProvider.Paths.Root);
             console.Command("xrayne version");
             console.Command("xrayne info");
@@ -235,6 +266,15 @@ public sealed class UpdateCommand : Command
         console.Value("Docker image", getImageName(targetVersion));
 
         return true;
+    }
+
+    private static int ResolveTargetSchemaVersion(params Release?[] releases)
+    {
+        return releases
+            .Where(release => release is not null)
+            .Select(release => RuntimeSchemaCatalog.ResolveForRelease(release!.TagName))
+            .DefaultIfEmpty(RuntimeSchemaCatalog.LatestSchemaVersion)
+            .Max();
     }
 
     private static void PrintMigrationResult(
@@ -470,6 +510,15 @@ public sealed class UpdateCommand : Command
         await using var gzip = new GZipStream(input, CompressionMode.Decompress);
         await using var output = File.Create(destinationPath);
         await gzip.CopyToAsync(output, cancellationToken);
+    }
+
+    private static void EnsurePrereleaseAllowed(Release? release, string requestedVersion)
+    {
+        if (release?.Prerelease == true
+            && string.Equals(requestedVersion, CliDefaults.LatestVersion, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Latest updates must use stable releases. Pass an explicit alpha or beta tag to update to a pre-release.");
+        }
     }
 
     private static string SanitizeDockerTag(string value)

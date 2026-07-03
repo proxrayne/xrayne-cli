@@ -28,7 +28,7 @@ public sealed class ApiVersionCommand : Command
         var console = serviceProvider.GetRequiredService<ICliConsole>();
         var logger = serviceProvider.GetRequiredService<ILogger<ApiVersionCommand>>();
         var configuration = serviceProvider.GetRequiredService<IConfiguration>();
-        using var repository = new GitHubReleaseClient(CliDefaults.XRayneRepositoryUrl);
+        using var repository = new GitHubReleaseClient(CliDefaults.ApiRepositoryUrl);
 
         try
         {

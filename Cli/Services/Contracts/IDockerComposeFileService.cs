@@ -6,6 +6,7 @@ public interface IDockerComposeFileService
 {
     Task WriteApiComposeAsync(
         ProjectPaths paths,
-        string imageTag,
+        string apiImageTag,
+        string uiImageTag,
         CancellationToken cancellationToken);
 }

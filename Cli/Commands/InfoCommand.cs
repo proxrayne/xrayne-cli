@@ -33,7 +33,9 @@ public sealed class InfoCommand : Command
         var logger = serviceProvider.GetRequiredService<ILogger<InfoCommand>>();
         var configuration = serviceProvider.GetRequiredService<IConfiguration>();
         var apiInstallationService = serviceProvider.GetRequiredService<IApiInstallationService>();
-        using var repository = new GitHubReleaseClient(CliDefaults.XRayneRepositoryUrl);
+        using var cliRepository = new GitHubReleaseClient(CliDefaults.CliRepositoryUrl);
+        using var apiRepository = new GitHubReleaseClient(CliDefaults.ApiRepositoryUrl);
+        using var uiRepository = new GitHubReleaseClient(CliDefaults.UiRepositoryUrl);
 
         try
         {
@@ -47,7 +49,9 @@ public sealed class InfoCommand : Command
             var apiVersion = CliDefaults.ExtractApiImageVersion(configuration[CliDefaults.ApiImageVariable] ?? string.Empty);
             var uiVersion = CliDefaults.ExtractUiImageVersion(configuration[CliDefaults.UiImageVariable] ?? string.Empty);
             var updateStatus = await GetUpdateStatusAsync(
-                repository,
+                cliRepository,
+                apiRepository,
+                uiRepository,
                 cliVersion,
                 apiVersion,
                 uiVersion,
@@ -69,7 +73,9 @@ public sealed class InfoCommand : Command
             console.Value("Docker image", GetConfigurationValue(configuration, CliDefaults.UiImageVariable, "(unknown)"));
 
             console.Section("Updates");
-            console.Value("Latest release", updateStatus.LatestRelease);
+            console.Value("Latest CLI release", updateStatus.LatestCliRelease);
+            console.Value("Latest API release", updateStatus.LatestApiRelease);
+            console.Value("Latest UI release", updateStatus.LatestUiRelease);
             console.Value("CLI update", updateStatus.CliUpdate);
             console.Value("API update", updateStatus.ApiUpdate);
             console.Value("UI update", updateStatus.UiUpdate);
@@ -95,7 +101,9 @@ public sealed class InfoCommand : Command
     }
 
     private static async Task<UpdateStatus> GetUpdateStatusAsync(
-        GitHubReleaseClient gitHubRepository,
+        GitHubReleaseClient cliRepository,
+        GitHubReleaseClient apiRepository,
+        GitHubReleaseClient uiRepository,
         string cliVersion,
         string? apiVersion,
         string? uiVersion,
@@ -103,13 +111,15 @@ public sealed class InfoCommand : Command
     {
         try
         {
-            var release = await gitHubRepository.GetReleaseAsync(CliDefaults.LatestVersion, cancellationToken);
-            var latestApiVersion = SanitizeDockerTag(release.TagName);
-            var latestUiVersion = latestApiVersion;
+            var cliRelease = await cliRepository.GetReleaseAsync(CliDefaults.LatestVersion, cancellationToken);
+            var apiRelease = await apiRepository.GetReleaseAsync(CliDefaults.LatestVersion, cancellationToken);
+            var uiRelease = await uiRepository.GetReleaseAsync(CliDefaults.LatestVersion, cancellationToken);
+            var latestApiVersion = SanitizeDockerTag(apiRelease.TagName);
+            var latestUiVersion = SanitizeDockerTag(uiRelease.TagName);
 
-            var cliUpdate = string.Equals(cliVersion, release.TagName, StringComparison.Ordinal)
+            var cliUpdate = string.Equals(cliVersion, cliRelease.TagName, StringComparison.Ordinal)
                 ? "not available"
-                : $"available ({cliVersion} -> {release.TagName})";
+                : $"available ({cliVersion} -> {cliRelease.TagName})";
 
             var apiUpdate = string.IsNullOrWhiteSpace(apiVersion)
                 ? $"not installed (latest: {latestApiVersion})"
@@ -123,13 +133,15 @@ public sealed class InfoCommand : Command
                     ? "not available"
                     : $"available ({uiVersion} -> {latestUiVersion})";
 
-            return new UpdateStatus(release.TagName, cliUpdate, apiUpdate, uiUpdate);
+            return new UpdateStatus(cliRelease.TagName, apiRelease.TagName, uiRelease.TagName, cliUpdate, apiUpdate, uiUpdate);
         }
         catch (Exception exception)
         {
             var message = exception.GetBaseException().Message;
 
             return new UpdateStatus(
+                $"unavailable ({message})",
+                $"unavailable ({message})",
                 $"unavailable ({message})",
                 "unknown",
                 string.IsNullOrWhiteSpace(apiVersion) ? "not installed" : "unknown",
@@ -224,7 +236,9 @@ public sealed class InfoCommand : Command
     }
 
     private sealed record UpdateStatus(
-        string LatestRelease,
+        string LatestCliRelease,
+        string LatestApiRelease,
+        string LatestUiRelease,
         string CliUpdate,
         string ApiUpdate,
         string UiUpdate);

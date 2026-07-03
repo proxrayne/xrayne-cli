@@ -48,7 +48,7 @@ public sealed class RuntimeMigrationTests
         var paths = new ProjectPaths(workspace.Root);
         var service = new DockerComposeFileService();
 
-        await service.WriteApiComposeAsync(paths, "0.0.16", CancellationToken.None);
+        await service.WriteApiComposeAsync(paths, "0.0.16", "0.0.16", CancellationToken.None);
 
         var compose = await File.ReadAllTextAsync(paths.DockerCompose);
         compose.Should().Contain("ui:");

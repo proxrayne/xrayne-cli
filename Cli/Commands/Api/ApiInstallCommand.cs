@@ -47,19 +47,20 @@ public sealed class ApiInstallCommand : Command
         var shellService = serviceProvider.GetRequiredService<IShellService>();
         var apiInstallationService = serviceProvider.GetRequiredService<IApiInstallationService>();
         var dockerComposeFileService = serviceProvider.GetRequiredService<IDockerComposeFileService>();
-        using var repository = new GitHubReleaseClient(CliDefaults.XRayneRepositoryUrl);
+        using var apiRepository = new GitHubReleaseClient(CliDefaults.ApiRepositoryUrl);
+        using var uiRepository = new GitHubReleaseClient(CliDefaults.UiRepositoryUrl);
 
         try
         {
             var options = ReadInstallOptions();
 
-            var release = await repository.GetReleaseAsync(version, cancellationToken);
-            if (release.Prerelease)
-            {
-                throw new InvalidOperationException("Pre-release versions are not supported. Use a stable release tag.");
-            }
+            var apiRelease = await apiRepository.GetReleaseAsync(version, cancellationToken);
+            var uiRelease = await uiRepository.GetReleaseAsync(version, cancellationToken);
+            EnsurePrereleaseAllowed(apiRelease, version);
+            EnsurePrereleaseAllowed(uiRelease, version);
 
-            var imageTag = SanitizeDockerTag(release.TagName);
+            var apiImageTag = SanitizeDockerTag(apiRelease.TagName);
+            var uiImageTag = SanitizeDockerTag(uiRelease.TagName);
             Directory.CreateDirectory(options.Paths.LogsDirectory);
             Directory.CreateDirectory(options.Paths.PostgresDirectory);
             Directory.CreateDirectory(options.Paths.XrayDirectory);
@@ -67,32 +68,32 @@ public sealed class ApiInstallCommand : Command
 
             await DownloadAndLoadImageAsync(
                 console,
-                repository,
+                apiRepository,
                 shellService,
-                release,
-                CliDefaults.GetApiImageArchiveName(imageTag),
-                CliDefaults.GetApiImageTarName(imageTag),
+                apiRelease,
+                CliDefaults.GetApiImageArchiveName(apiImageTag),
+                CliDefaults.GetApiImageTarName(apiImageTag),
                 options,
                 cancellationToken);
             await DownloadAndLoadImageAsync(
                 console,
-                repository,
+                uiRepository,
                 shellService,
-                release,
-                CliDefaults.GetUiImageArchiveName(imageTag),
-                CliDefaults.GetUiImageTarName(imageTag),
+                uiRelease,
+                CliDefaults.GetUiImageArchiveName(uiImageTag),
+                CliDefaults.GetUiImageTarName(uiImageTag),
                 options,
                 cancellationToken);
 
-            await WriteEnvFileAsync(imageTag, options, cancellationToken);
-            await dockerComposeFileService.WriteApiComposeAsync(options.Paths, imageTag, cancellationToken);
+            await WriteEnvFileAsync(apiImageTag, uiImageTag, options, cancellationToken);
+            await dockerComposeFileService.WriteApiComposeAsync(options.Paths, apiImageTag, uiImageTag, cancellationToken);
 
             console.Success($"API installation files are ready in '{options.Paths.Root}'.");
             console.Success("Starting Docker Compose.");
 
             await apiInstallationService.RunDockerComposeAsync("up -d", cancellationToken);
 
-            PrintInstallSummary(console, release.TagName, imageTag, options);
+            PrintInstallSummary(console, apiRelease.TagName, uiRelease.TagName, apiImageTag, uiImageTag, options);
 
             return 0;
         }
@@ -199,7 +200,8 @@ public sealed class ApiInstallCommand : Command
     }
 
     private static async Task WriteEnvFileAsync(
-        string imageTag,
+        string apiImageTag,
+        string uiImageTag,
         InstallOptions options,
         CancellationToken cancellationToken)
     {
@@ -208,8 +210,8 @@ public sealed class ApiInstallCommand : Command
             ["PORT"] = options.ApiPort.ToString(),
             ["UI_PORT"] = options.UiPort.ToString(),
             ["PROJECT_PATH"] = options.Paths.Root,
-            ["API_IMAGE"] = CliDefaults.GetApiImageName(imageTag),
-            ["UI_IMAGE"] = CliDefaults.GetUiImageName(imageTag),
+            ["API_IMAGE"] = CliDefaults.GetApiImageName(apiImageTag),
+            ["UI_IMAGE"] = CliDefaults.GetUiImageName(uiImageTag),
             ["POSTGRES_DB"] = CliDefaults.PostgresDatabase,
             ["POSTGRES_HOST_API"] = "localhost",
             ["POSTGRES_USER"] = CliDefaults.PostgresUser,
@@ -232,16 +234,19 @@ public sealed class ApiInstallCommand : Command
 
     private static void PrintInstallSummary(
         ICliConsole console,
-        string releaseTag,
-        string imageTag,
+        string apiReleaseTag,
+        string uiReleaseTag,
+        string apiImageTag,
+        string uiImageTag,
         InstallOptions options)
     {
         var panelUrl = $"http://0.0.0.0:{options.UiPort}/";
         var apiUrl = $"http://0.0.0.0:{options.ApiPort}/api";
 
         console.Header("XRayne API installation completed");
-        console.Value("Release", releaseTag);
-        console.Value("Docker image", CliDefaults.GetApiImageName(imageTag));
+        console.Value("API release", apiReleaseTag);
+        console.Value("UI release", uiReleaseTag);
+        console.Value("Docker image", CliDefaults.GetApiImageName(apiImageTag));
         console.Value("Project path", options.Paths.Root);
         console.Value("Environment file", options.Paths.EnvConfig);
         console.Value("Compose file", options.Paths.DockerCompose);
@@ -249,7 +254,7 @@ public sealed class ApiInstallCommand : Command
         console.Section("Panel");
         console.Value("URL", panelUrl);
         console.Value("API URL", apiUrl);
-        console.Value("Docker image", CliDefaults.GetUiImageName(imageTag));
+        console.Value("Docker image", CliDefaults.GetUiImageName(uiImageTag));
 
         console.Section("PostgreSQL");
         console.Value("API host", "localhost:5432");
@@ -271,6 +276,14 @@ public sealed class ApiInstallCommand : Command
         console.Command("docker compose logs -f ui");
         console.Command("docker compose logs -f api");
         console.Command("docker compose logs -f postgres");
+    }
+
+    private static void EnsurePrereleaseAllowed(Release release, string requestedVersion)
+    {
+        if (release.Prerelease && string.Equals(requestedVersion, CliDefaults.LatestVersion, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Latest installs must use stable releases. Pass an explicit alpha or beta tag to install a pre-release.");
+        }
     }
 
     private static string SanitizeDockerTag(string value)
