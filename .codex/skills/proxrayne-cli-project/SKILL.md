@@ -11,6 +11,7 @@ This repository owns the standalone XRayne CLI source. The executable assembly r
 
 ## Rules
 
+- Read the shared meta styleguide `xrayne-ai/docs/DOTNET_STYLEGUIDE.md` before .NET backend, CLI command, EF/data, service, configuration, logging, test, or documentation changes.
 - Use `$proxrayne-project` first when CLI changes affect release assets, installer behavior, `xrayne-panel`, `xrayne`, or shared runtime contracts.
 - Keep CLI command behavior, executable name, runtime file layout, and release artifact names backward compatible unless the user explicitly asks for a breaking change.
 - Keep EF persistence and config-file utilities in `Data`.

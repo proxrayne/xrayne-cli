@@ -133,7 +133,3 @@ public static class NetworkAddress
             .Where(address => !IPAddress.IsLoopback(address));
     }
 }
-
-public sealed record ServerIpAddresses(
-    IReadOnlyCollection<string> IPv4Addresses,
-    IReadOnlyCollection<string> IPv6Addresses);

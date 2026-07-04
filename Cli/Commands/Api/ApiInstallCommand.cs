@@ -13,8 +13,14 @@ using Octokit;
 
 namespace Cli.Commands.Api;
 
+/// <summary>
+/// Downloads API and UI release images and prepares the local Docker Compose runtime.
+/// </summary>
 public sealed class ApiInstallCommand : Command
 {
+    /// <summary>
+    /// Initializes the API install command.
+    /// </summary>
     public ApiInstallCommand(IServiceProvider serviceProvider)
         : base("install", "Download and install XRayne API and UI Docker images")
     {
@@ -261,7 +267,7 @@ public sealed class ApiInstallCommand : Command
         console.Value("CLI host", "localhost:5432");
         console.Value("Database", CliDefaults.PostgresDatabase);
         console.Value("Username", CliDefaults.PostgresUser);
-        console.Value("Password", options.PostgresPassword);
+        console.Value("Password", $"stored in {options.Paths.EnvConfig}");
 
         console.Section("Project folders");
         console.Value("Logs", options.Paths.LogsDirectory);
